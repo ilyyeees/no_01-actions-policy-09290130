@@ -1,0 +1,56 @@
+name: no_01 Actions policy administration probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Probe Actions policy administration with GITHUB_TOKEN
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          POLICY_ID: "5944"
+        shell: bash
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${REPOSITORY}/actions/policies"
+          headers=(
+            -H "Authorization: Bearer ${GH_TOKEN}"
+            -H "Accept: application/vnd.github+json"
+            -H "X-GitHub-Api-Version: 2026-03-10"
+          )
+
+          list_status="$(curl -sS -o no_01-list.json -w '%{http_code}' "${headers[@]}" "${api}")"
+          detail_status="$(curl -sS -o no_01-detail.json -w '%{http_code}' "${headers[@]}" "${api}/${POLICY_ID}")"
+
+          jq -n '{
+            name: "no_01 owner-only reusable workflow",
+            enforcement: "active",
+            conditions: {
+              workflow_path: {
+                include: [".github/workflows/no_01-policy-reusable-sensitive.yml"],
+                exclude: []
+              }
+            },
+            rules: [{
+              type: "restrict_actions_actors",
+              parameters: {
+                allowed_actors: [{id: 313884183, type: "User"}]
+              }
+            }]
+          }' > no_01-policy.json
+
+          update_status="$(curl -sS -X PUT -o no_01-update.json -w '%{http_code}' "${headers[@]}" \
+            -H 'Content-Type: application/json' --data-binary @no_01-policy.json "${api}/${POLICY_ID}")"
+
+          printf 'list_http=%s\ndetail_http=%s\nupdate_http=%s\n' \
+            "$list_status" "$detail_status" "$update_status"
+          jq -c '{message,documentation_url,status}' no_01-list.json 2>/dev/null || true
+          jq -c '{message,documentation_url,status}' no_01-detail.json 2>/dev/null || true
+          jq -c '{message,documentation_url,status,id,name,enforcement}' no_01-update.json 2>/dev/null || true
