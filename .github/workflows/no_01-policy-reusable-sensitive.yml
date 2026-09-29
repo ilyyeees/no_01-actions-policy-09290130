@@ -1,0 +1,22 @@
+name: no_01 policy reusable sensitive
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sensitive:
+    runs-on: ubuntu-latest
+    env:
+      NO_01_POLICY_SECRET: ${{ secrets.NO_01_POLICY_SECRET }}
+    steps:
+      - name: Prove reusable sensitive workflow execution
+        shell: bash
+        run: |
+          test -n "$NO_01_POLICY_SECRET"
+          secret_sha256="$(printf '%s' "$NO_01_POLICY_SECRET" | sha256sum | awk '{print $1}')"
+          printf 'NO_01_POLICY_REUSABLE secret_sha256=%s actor=%s triggering_actor=%s event=%s run=%s workflow_ref=%s\n' \
+            "$secret_sha256" "$GITHUB_ACTOR" "$GITHUB_TRIGGERING_ACTOR" "$GITHUB_EVENT_NAME" "$GITHUB_RUN_ID" "$GITHUB_WORKFLOW_REF"
