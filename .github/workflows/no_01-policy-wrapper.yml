@@ -1,0 +1,12 @@
+name: no_01 policy wrapper
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  call-sensitive:
+    uses: ./.github/workflows/no_01-policy-reusable-sensitive.yml
+    secrets: inherit
