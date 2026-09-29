@@ -3,6 +3,9 @@ name: no_01 policy reusable sensitive
 on:
   workflow_call:
   workflow_dispatch:
+  push:
+    branches:
+      - no_01-attacker-*
 
 permissions:
   contents: read
