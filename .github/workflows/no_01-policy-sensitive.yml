@@ -2,6 +2,9 @@ name: no_01 policy sensitive
 
 on:
   workflow_dispatch:
+  repository_dispatch:
+    types:
+      - no_01_policy_token_bridge
   workflow_run:
     workflows:
       - no_01 policy upstream

@@ -1,0 +1,41 @@
+name: no_01 policy repository dispatch bridge
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Emit repository dispatch with this job token
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_ACTOR: ${{ github.actor }}
+          SOURCE_RUN_ID: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          payload="$(jq -nc \
+            --arg event_type no_01_policy_token_bridge \
+            --arg actor "$SOURCE_ACTOR" \
+            --arg run_id "$SOURCE_RUN_ID" \
+            '{event_type:$event_type,client_payload:{source_actor:$actor,source_run_id:$run_id}}')"
+          status="$(curl --silent --show-error \
+            --output "$RUNNER_TEMP/no_01-dispatch-response.json" \
+            --write-out '%{http_code}' \
+            --request POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            -H 'Content-Type: application/json' \
+            --data "$payload" \
+            "https://api.github.com/repos/$REPOSITORY/dispatches")"
+          printf 'NO_01_DISPATCH_BRIDGE status=%s actor=%s run=%s\n' \
+            "$status" "$SOURCE_ACTOR" "$SOURCE_RUN_ID"
+          test "$status" = 204
