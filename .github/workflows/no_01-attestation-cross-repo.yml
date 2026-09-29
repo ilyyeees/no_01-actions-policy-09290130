@@ -42,7 +42,6 @@ jobs:
             --data-binary @no_01-request.json \
             "$TARGET_URL")
           printf 'cross_repository_status=%s\n' "$status"
-          printf '::notice title=Cross-repository attestation response::status=%s\n' "$status"
           jq '{id, message, status, errors}' no_01-response.json
 
       - name: Show source control identifiers
