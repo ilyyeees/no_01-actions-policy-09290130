@@ -1,0 +1,16 @@
+name: no_01 policy upstream
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record initiating actor
+        run: |
+          printf 'NO_01_UPSTREAM actor=%s triggering_actor=%s event=%s run=%s\n' \
+            "$GITHUB_ACTOR" "$GITHUB_TRIGGERING_ACTOR" "$GITHUB_EVENT_NAME" "$GITHUB_RUN_ID"
