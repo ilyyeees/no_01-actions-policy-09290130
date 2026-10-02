@@ -1,0 +1,145 @@
+name: no_01 artifact Windows dot-space containment
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/no_01-artifact-windows-dotspace.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  producer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create a ZIP with Windows dot-space path components
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import zipfile
+
+          with zipfile.ZipFile("payload.zip", "w", zipfile.ZIP_DEFLATED) as archive:
+              archive.writestr(
+                  "safe/.. /.. /no_01-outside-marker.txt",
+                  "NO_01_WINDOWS_DOTSPACE_20261002\n",
+              )
+          PY
+          sha256sum payload.zip
+          unzip -Z1 payload.zip
+
+      - name: Upload the exact ZIP through the Actions Results service
+        shell: bash
+        env:
+          ARTIFACT_NAME: no_01-windows-dotspace-${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          read -r backend_run backend_job < <(
+            python3 - <<'PY'
+          import base64
+          import json
+          import os
+
+          token = os.environ["ACTIONS_RUNTIME_TOKEN"]
+          payload = token.split(".")[1]
+          payload += "=" * ((4 - len(payload) % 4) % 4)
+          claims = json.loads(base64.urlsafe_b64decode(payload))
+          scope = next(item for item in claims["scp"].split() if item.startswith("Actions.Results:"))
+          _, run_id, job_id = scope.split(":")
+          print(run_id, job_id)
+          PY
+          )
+
+          results_origin="$(python3 - <<'PY'
+          import os
+          import urllib.parse
+
+          parsed = urllib.parse.urlsplit(os.environ["ACTIONS_RESULTS_URL"])
+          print(f"{parsed.scheme}://{parsed.netloc}")
+          PY
+          )"
+          service="$results_origin/twirp/github.actions.results.api.v1.ArtifactService"
+
+          create_payload="$(jq -nc \
+            --arg run "$backend_run" \
+            --arg job "$backend_job" \
+            --arg name "$ARTIFACT_NAME" \
+            '{workflow_run_backend_id:$run,workflow_job_run_backend_id:$job,name:$name,version:7,mime_type:"application/zip"}')"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $ACTIONS_RUNTIME_TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data-binary "$create_payload" \
+            "$service/CreateArtifact" > create.json
+          upload_url="$(jq -er '.signed_upload_url' create.json)"
+
+          curl --fail-with-body --silent --show-error \
+            -X PUT \
+            -H 'x-ms-blob-type: BlockBlob' \
+            -H 'x-ms-version: 2021-12-02' \
+            -H 'Content-Type: application/zip' \
+            --data-binary @payload.zip \
+            "$upload_url" > upload.txt
+
+          size="$(stat -c %s payload.zip)"
+          digest="$(sha256sum payload.zip | awk '{print $1}')"
+          finalize_payload="$(jq -nc \
+            --arg run "$backend_run" \
+            --arg job "$backend_job" \
+            --arg name "$ARTIFACT_NAME" \
+            --arg size "$size" \
+            --arg hash "sha256:$digest" \
+            '{workflow_run_backend_id:$run,workflow_job_run_backend_id:$job,name:$name,size:$size,hash:$hash}')"
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $ACTIONS_RUNTIME_TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data-binary "$finalize_payload" \
+            "$service/FinalizeArtifact" > finalize.json
+
+          artifact_id="$(jq -er '.artifact_id' finalize.json)"
+          printf 'artifact_name=%s artifact_id=%s size=%s digest=sha256:%s\n' \
+            "$ARTIFACT_NAME" "$artifact_id" "$size" "$digest"
+
+  consumer:
+    needs: producer
+    runs-on: windows-latest
+    steps:
+      - name: Prepare isolated extraction root
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'no_01-root'
+          Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $root
+          New-Item -ItemType Directory -Force -Path (Join-Path $root 'download') | Out-Null
+          "root=$root" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Download crafted artifact with the current official action
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: no_01-windows-dotspace-${{ github.run_id }}
+          path: ${{ runner.temp }}/no_01-root/download
+
+      - name: Evaluate containment
+        shell: pwsh
+        env:
+          DOWNLOAD_OUTCOME: ${{ steps.download.outcome }}
+        run: |
+          $outside = Join-Path $env:root 'no_01-outside-marker.txt'
+          $insideRoot = Join-Path $env:root 'download'
+          $files = @(Get-ChildItem -LiteralPath $env:root -Recurse -Force -File -ErrorAction SilentlyContinue)
+          Write-Output "download_outcome=$env:DOWNLOAD_OUTCOME"
+          Write-Output "file_count=$($files.Count)"
+          foreach ($file in $files) {
+            Write-Output "observed=$($file.FullName.Substring($env:root.Length + 1))"
+          }
+
+          if (Test-Path -LiteralPath $outside) {
+            $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $outside).Hash.ToLowerInvariant()
+            Write-Output "containment=false outside_marker=true sha256=$digest"
+          } else {
+            Write-Output 'containment=true outside_marker=false'
+          }
