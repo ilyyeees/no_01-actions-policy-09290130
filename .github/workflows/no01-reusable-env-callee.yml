@@ -1,0 +1,25 @@
+name: no01 reusable environment callee
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gated:
+    environment: no01-reusable-main-gate-20261002
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report only non-secret proof
+        shell: bash
+        env:
+          NO01_CANARY: ${{ secrets.NO01_REUSABLE_GATE_CANARY }}
+        run: |
+          set -euo pipefail
+          printf 'NO01_REF=%s\n' '${{ github.ref }}'
+          printf 'NO01_WORKFLOW_REF=%s\n' '${{ github.workflow_ref }}'
+          printf 'NO01_WORKFLOW_SHA=%s\n' '${{ github.workflow_sha }}'
+          printf 'NO01_SECRET_PRESENT=%s\n' "$([[ -n "$NO01_CANARY" ]] && printf true || printf false)"
+          printf 'NO01_SECRET_SHA256=%s\n' "$(printf %s "$NO01_CANARY" | sha256sum | cut -d ' ' -f 1)"

@@ -1,0 +1,11 @@
+name: no01 reusable environment caller
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  call-gated-workflow:
+    uses: ilyyeees/no_01-actions-policy-09290130/.github/workflows/no01-reusable-env-callee.yml@main
