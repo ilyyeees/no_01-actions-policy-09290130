@@ -1,0 +1,12 @@
+name: no_01 raw artifact fixture
+description: Upload an exact controlled ZIP through the current Actions Results capability
+
+inputs:
+  artifact_name:
+    required: true
+  zip_path:
+    required: true
+
+runs:
+  using: node24
+  main: index.js
